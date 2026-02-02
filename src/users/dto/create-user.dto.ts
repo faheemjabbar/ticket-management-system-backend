@@ -16,8 +16,8 @@ export class CreateUserDto {
   @MinLength(8)
   password: string;
 
-  @ApiProperty({ enum: ['admin', 'developer', 'qa'] })
-  @IsEnum(['admin', 'developer', 'qa'])
+  @ApiProperty({ enum: ['superadmin', 'admin', 'developer', 'qa'] })
+  @IsEnum(['superadmin', 'admin', 'developer', 'qa'])
   role: string;
 
   @ApiProperty({ required: false })

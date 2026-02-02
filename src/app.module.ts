@@ -8,6 +8,9 @@ import { ProjectsModule } from './projects/projects.module';
 import { TicketsModule } from './tickets/tickets.module';
 import { CommentsModule } from './comments/comments.module';
 import { TicketHistoryModule } from './ticket-history/ticket-history.module';
+import { UploadModule } from './upload/upload.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ActivitiesModule } from './activities/activities.module';
 
 @Module({
   imports: [
@@ -44,6 +47,12 @@ import { TicketHistoryModule } from './ticket-history/ticket-history.module';
     CommentsModule,
 
     TicketHistoryModule,
+
+    UploadModule,
+
+    NotificationsModule,
+
+    ActivitiesModule,
   ],
 })
 export class AppModule {}

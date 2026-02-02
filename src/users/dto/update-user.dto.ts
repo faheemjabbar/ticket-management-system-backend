@@ -12,9 +12,9 @@ export class UpdateUserDto {
   @IsString()
   email?: string;
 
-  @ApiProperty({ required: false, enum: ['admin', 'developer', 'qa'] })
+  @ApiProperty({ required: false, enum: ['superadmin', 'admin', 'developer', 'qa'] })
   @IsOptional()
-  @IsEnum(['admin', 'developer', 'qa'])
+  @IsEnum(['superadmin', 'admin', 'developer', 'qa'])
   role?: string;
 
   @ApiProperty({ required: false })

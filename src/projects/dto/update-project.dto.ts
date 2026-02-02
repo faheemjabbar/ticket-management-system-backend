@@ -7,8 +7,8 @@ class TeamMemberUpdateDto {
   @IsString()
   userId: string;
 
-  @ApiProperty({ enum: ['admin', 'qa', 'developer'] })
-  @IsEnum(['admin', 'qa', 'developer'])
+  @ApiProperty({ enum: ['superadmin', 'admin', 'qa', 'developer'] })
+  @IsEnum(['superadmin', 'admin', 'qa', 'developer'])
   role: string;
 
   @ApiProperty({ required: false })

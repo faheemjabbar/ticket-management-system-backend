@@ -98,4 +98,27 @@ export class UsersService {
   async updateLastLogin(id: string): Promise<void> {
     await this.userModel.findByIdAndUpdate(id, { lastLogin: new Date() }).exec();
   }
+
+  async updateNotificationPreferences(id: string, preferences: any): Promise<any> {
+    const user = await this.userModel
+      .findByIdAndUpdate(
+        id,
+        { notificationPreferences: preferences },
+        { new: true }
+      )
+      .exec();
+    
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.toJSON();
+  }
+
+  async getNotificationPreferences(id: string): Promise<any> {
+    const user = await this.userModel.findById(id).select('notificationPreferences').exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user.notificationPreferences;
+  }
 }

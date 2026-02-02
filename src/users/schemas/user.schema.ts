@@ -14,7 +14,7 @@ export class User {
   @Prop({ required: true, select: false })
   password: string;
 
-  @Prop({ required: true, enum: ['admin', 'developer', 'qa'], default: 'developer' })
+  @Prop({ required: true, enum: ['superadmin', 'admin', 'developer', 'qa'], default: 'developer' })
   role: string;
 
   @Prop({ default: null })
@@ -34,12 +34,38 @@ export class User {
 
   @Prop({ type: Date, default: null })
   lastLogin: Date;
+
+  @Prop({
+    type: {
+      emailNotifications: { type: Boolean, default: true },
+      ticketAssigned: { type: Boolean, default: true },
+      ticketUpdated: { type: Boolean, default: true },
+      ticketClosed: { type: Boolean, default: true },
+      weeklyDigest: { type: Boolean, default: false },
+      mentionNotifications: { type: Boolean, default: true },
+    },
+    default: {
+      emailNotifications: true,
+      ticketAssigned: true,
+      ticketUpdated: true,
+      ticketClosed: true,
+      weeklyDigest: false,
+      mentionNotifications: true,
+    },
+  })
+  notificationPreferences: {
+    emailNotifications: boolean;
+    ticketAssigned: boolean;
+    ticketUpdated: boolean;
+    ticketClosed: boolean;
+    weeklyDigest: boolean;
+    mentionNotifications: boolean;
+  };
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Indexes
-UserSchema.index({ email: 1 });
+// Indexes (email index is already created by unique: true)
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 

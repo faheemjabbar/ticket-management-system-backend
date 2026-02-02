@@ -4,10 +4,16 @@ import { Model } from 'mongoose';
 import { Ticket, TicketDocument } from './schemas/ticket.schema';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ActivitiesService } from '../activities/activities.service';
 
 @Injectable()
 export class TicketsService {
-  constructor(@InjectModel(Ticket.name) private ticketModel: Model<TicketDocument>) {}
+  constructor(
+    @InjectModel(Ticket.name) private ticketModel: Model<TicketDocument>,
+    private notificationsService: NotificationsService,
+    private activitiesService: ActivitiesService,
+  ) {}
 
   async create(createTicketDto: CreateTicketDto, user: any, projectName: string): Promise<any> {
     const ticket = new this.ticketModel({
@@ -18,7 +24,17 @@ export class TicketsService {
       status: 'pending',
     });
     const savedTicket = await ticket.save();
-    return savedTicket.toJSON();
+    const ticketJson = savedTicket.toJSON() as any;
+
+    // Log activity
+    await this.activitiesService.logTicketCreated(
+      ticketJson.id,
+      ticketJson.title,
+      user.id,
+      user.name,
+    );
+
+    return ticketJson;
   }
 
   async findAll(query: any = {}): Promise<any> {
@@ -53,6 +69,11 @@ export class TicketsService {
   }
 
   async update(id: string, updateTicketDto: UpdateTicketDto): Promise<any> {
+    const oldTicket = await this.ticketModel.findById(id).exec();
+    if (!oldTicket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
     const ticket = await this.ticketModel
       .findByIdAndUpdate(id, updateTicketDto, { new: true })
       .exec();
@@ -60,7 +81,32 @@ export class TicketsService {
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
-    return ticket.toJSON();
+
+    const ticketJson = ticket.toJSON() as any;
+
+    // Log activity for updates
+    const changes: string[] = [];
+    if (updateTicketDto.title && updateTicketDto.title !== oldTicket.title) {
+      changes.push('title');
+    }
+    if (updateTicketDto.description && updateTicketDto.description !== oldTicket.description) {
+      changes.push('description');
+    }
+    if (updateTicketDto.priority && updateTicketDto.priority !== oldTicket.priority) {
+      changes.push('priority');
+    }
+
+    if (changes.length > 0) {
+      await this.activitiesService.logTicketUpdated(
+        ticketJson.id,
+        ticketJson.title,
+        'System', // You can pass actual user from controller
+        'System',
+        `Updated ${changes.join(', ')}`,
+      );
+    }
+
+    return ticketJson;
   }
 
   async delete(id: string): Promise<void> {
@@ -70,7 +116,7 @@ export class TicketsService {
     }
   }
 
-  async assignTicket(id: string, assignedToId: string, assignedToName: string): Promise<any> {
+  async assignTicket(id: string, assignedToId: string, assignedToName: string, assignedBy: any): Promise<any> {
     const ticket = await this.ticketModel
       .findByIdAndUpdate(
         id,
@@ -82,10 +128,44 @@ export class TicketsService {
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
-    return ticket.toJSON();
+
+    const ticketJson = ticket.toJSON() as any;
+
+    // Log activity
+    await this.activitiesService.logTicketAssigned(
+      ticketJson.id,
+      ticketJson.title,
+      assignedBy.id,
+      assignedBy.name,
+      assignedToId,
+      assignedToName,
+    );
+
+    // Send real-time notification
+    await this.notificationsService.notifyTicketAssigned(
+      assignedToId,
+      ticketJson.id,
+      ticketJson.title,
+      assignedBy.name,
+    );
+
+    // Broadcast ticket update
+    await this.notificationsService.broadcastTicketUpdate(ticketJson.id, {
+      action: 'assigned',
+      ticket: ticketJson,
+    });
+
+    return ticketJson;
   }
 
-  async updateStatus(id: string, status: string): Promise<any> {
+  async updateStatus(id: string, status: string, user: any): Promise<any> {
+    const oldTicket = await this.ticketModel.findById(id).exec();
+    if (!oldTicket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    const oldStatus = oldTicket.status;
+
     const ticket = await this.ticketModel
       .findByIdAndUpdate(id, { status }, { new: true })
       .exec();
@@ -93,6 +173,45 @@ export class TicketsService {
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
-    return ticket.toJSON();
+
+    const ticketJson = ticket.toJSON() as any;
+
+    // Log activity
+    await this.activitiesService.logStatusChanged(
+      ticketJson.id,
+      ticketJson.title,
+      user.id,
+      user.name,
+      oldStatus,
+      status,
+    );
+
+    // Send notification if ticket is closed
+    if (status === 'closed') {
+      if (ticket.assignedToId) {
+        await this.notificationsService.notifyTicketClosed(
+          ticket.assignedToId.toString(),
+          ticketJson.id,
+          ticketJson.title,
+        );
+      }
+
+      // Log closed activity
+      await this.activitiesService.logTicketClosed(
+        ticketJson.id,
+        ticketJson.title,
+        user.id,
+        user.name,
+      );
+    }
+
+    // Broadcast ticket update
+    await this.notificationsService.broadcastTicketUpdate(ticketJson.id, {
+      action: 'status_changed',
+      status,
+      ticket: ticketJson,
+    });
+
+    return ticketJson;
   }
 }

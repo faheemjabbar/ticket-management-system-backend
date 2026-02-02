@@ -10,7 +10,7 @@ class TeamMember {
   @Prop({ required: true })
   userName: string;
 
-  @Prop({ required: true, enum: ['admin', 'qa', 'developer'] })
+  @Prop({ required: true, enum: ['superadmin', 'admin', 'qa', 'developer'] })
   role: string;
 
   @Prop({ type: Date, default: Date.now })
