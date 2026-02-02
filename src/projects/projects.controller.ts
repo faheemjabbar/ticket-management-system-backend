@@ -16,7 +16,7 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
-  @Roles('admin', 'qa')
+  @Roles('superadmin', 'admin', 'qa')
   @ApiOperation({ summary: 'Get all projects' })
   async findAll(@Query() query: any) {
     return this.projectsService.findAll(query);
@@ -29,21 +29,21 @@ export class ProjectsController {
   }
 
   @Post()
-  @Roles('admin', 'qa')
+  @Roles('superadmin', 'admin', 'qa')
   @ApiOperation({ summary: 'Create project' })
   async create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: any) {
     return this.projectsService.create(createProjectDto, user.id);
   }
 
   @Put(':id')
-  @Roles('admin', 'qa')
+  @Roles('superadmin', 'admin', 'qa')
   @ApiOperation({ summary: 'Update project' })
   async update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
     return this.projectsService.update(id, updateProjectDto);
   }
 
   @Delete(':id')
-  @Roles('admin')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete project' })
   async delete(@Param('id') id: string) {
     await this.projectsService.delete(id);
