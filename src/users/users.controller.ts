@@ -17,10 +17,10 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('superadmin', 'admin')
+  @Roles('superadmin', 'admin', 'qa')
   @ApiOperation({ summary: 'Get all users' })
-  async findAll(@Query() query: any) {
-    return this.usersService.findAll(query);
+  async findAll(@Query() query: any, @CurrentUser() user: any) {
+    return this.usersService.findAll(query, user);
   }
 
   @Get(':id')

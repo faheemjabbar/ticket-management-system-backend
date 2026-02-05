@@ -18,16 +18,39 @@ export class ProjectsService {
     return savedProject.toJSON();
   }
 
-  async findAll(query: any = {}): Promise<any> {
+  async findAll(query: any = {}, user?: any): Promise<any> {
     const { status, search, page = 1, limit = 20 } = query;
     
     const filter: any = {};
+    
+    // Role-based filtering: Admins only see their assigned projects
+    if (user && user.role === 'admin') {
+      filter.$or = [
+        { createdBy: user.id },
+        { 'teamMembers.userId': user.id }
+      ];
+    }
+    // Superadmin, QA, and Developer see all projects (or implement their own logic)
+    
     if (status) filter.status = status;
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-      ];
+      const searchFilter = {
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+        ]
+      };
+      
+      // Combine with existing filter
+      if (filter.$or) {
+        filter.$and = [
+          { $or: filter.$or },
+          searchFilter
+        ];
+        delete filter.$or;
+      } else {
+        Object.assign(filter, searchFilter);
+      }
     }
 
     const skip = (page - 1) * limit;
@@ -45,11 +68,23 @@ export class ProjectsService {
     };
   }
 
-  async findById(id: string): Promise<any> {
+  async findById(id: string, user?: any): Promise<any> {
     const project = await this.projectModel.findById(id).exec();
     if (!project) {
       throw new NotFoundException('Project not found');
     }
+    
+    // Check if admin has access to this project
+    if (user && user.role === 'admin') {
+      const hasAccess = 
+        project.createdBy.toString() === user.id ||
+        project.teamMembers.some(member => member.userId.toString() === user.id);
+      
+      if (!hasAccess) {
+        throw new NotFoundException('Project not found');
+      }
+    }
+    
     return project.toJSON();
   }
 

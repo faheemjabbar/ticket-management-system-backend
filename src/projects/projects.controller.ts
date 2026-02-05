@@ -18,14 +18,14 @@ export class ProjectsController {
   @Get()
   @Roles('superadmin', 'admin', 'qa')
   @ApiOperation({ summary: 'Get all projects' })
-  async findAll(@Query() query: any) {
-    return this.projectsService.findAll(query);
+  async findAll(@Query() query: any, @CurrentUser() user: any) {
+    return this.projectsService.findAll(query, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get project by ID' })
-  async findOne(@Param('id') id: string) {
-    return this.projectsService.findById(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.projectsService.findById(id, user);
   }
 
   @Post()

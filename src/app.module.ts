@@ -11,6 +11,7 @@ import { TicketHistoryModule } from './ticket-history/ticket-history.module';
 import { UploadModule } from './upload/upload.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ActivitiesModule } from './activities/activities.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -53,6 +54,8 @@ import { ActivitiesModule } from './activities/activities.module';
     NotificationsModule,
 
     ActivitiesModule,
+
+    MailModule,
   ],
 })
 export class AppModule {}

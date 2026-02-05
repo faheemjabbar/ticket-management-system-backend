@@ -2,12 +2,16 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
+import { Project, ProjectDocument } from '../projects/schemas/project.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
+  ) {}
 
   async create(createUserDto: CreateUserDto | any): Promise<any> {
     try {
@@ -22,17 +26,57 @@ export class UsersService {
     }
   }
 
-  async findAll(query: any = {}): Promise<any> {
+  async findAll(query: any = {}, user?: any): Promise<any> {
     const { role, isActive, search, page = 1, limit = 20 } = query;
     
     const filter: any = {};
+    
+    // Role-based filtering: Admins and QAs only see users from their assigned projects
+    if (user && (user.role === 'admin' || user.role === 'qa')) {
+      // Find all projects where the user is involved (created by them or they're a team member)
+      const projects = await this.projectModel.find({
+        $or: [
+          { createdBy: user.id },
+          { 'teamMembers.userId': user.id }
+        ]
+      }).exec();
+      
+      // Extract all unique user IDs from team members
+      const teamMemberIds = new Set<string>();
+      projects.forEach(project => {
+        // Add the project creator
+        teamMemberIds.add(project.createdBy.toString());
+        // Add all team members
+        project.teamMembers.forEach(member => {
+          teamMemberIds.add(member.userId.toString());
+        });
+      });
+      
+      // Filter users to only include team members
+      filter._id = { $in: Array.from(teamMemberIds) };
+    }
+    // Superadmin and Developer see all users
+    
     if (role) filter.role = role;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
     if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-      ];
+      const searchFilter = {
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+        ]
+      };
+      
+      // Combine with existing filter if needed
+      if (filter.$or) {
+        filter.$and = [
+          { $or: filter.$or },
+          searchFilter
+        ];
+        delete filter.$or;
+      } else {
+        Object.assign(filter, searchFilter);
+      }
     }
 
     const skip = (page - 1) * limit;
@@ -120,5 +164,38 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
     return user.notificationPreferences;
+  }
+
+  async setResetPasswordToken(email: string, token: string, expires: Date): Promise<void> {
+    const user = await this.userModel.findOne({ email }).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = expires;
+    await user.save();
+  }
+
+  async findByResetToken(token: string): Promise<any> {
+    const user = await this.userModel
+      .findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: new Date() }, // Token not expired
+      })
+      .select('+password')
+      .exec();
+    
+    return user;
+  }
+
+  async resetPassword(userId: string, newPassword: string): Promise<void> {
+    await this.userModel
+      .findByIdAndUpdate(userId, {
+        password: newPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      })
+      .exec();
   }
 }

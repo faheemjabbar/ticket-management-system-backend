@@ -6,11 +6,13 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ActivitiesService } from '../activities/activities.service';
+import { Project, ProjectDocument } from '../projects/schemas/project.schema';
 
 @Injectable()
 export class TicketsService {
   constructor(
     @InjectModel(Ticket.name) private ticketModel: Model<TicketDocument>,
+    @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
     private notificationsService: NotificationsService,
     private activitiesService: ActivitiesService,
   ) {}
@@ -37,13 +39,60 @@ export class TicketsService {
     return ticketJson;
   }
 
-  async findAll(query: any = {}): Promise<any> {
+  async findAll(query: any = {}, user?: any): Promise<any> {
     const { status, priority, projectId, page = 1, limit = 20 } = query;
     
     const filter: any = {};
+    
+    // Role-based filtering: Admins only see tickets from their assigned projects
+    if (user && user.role === 'admin') {
+      // Get all project IDs where admin is involved
+      const adminProjects = await this.projectModel.find({
+        $or: [
+          { createdBy: user.id },
+          { 'teamMembers.userId': user.id }
+        ]
+      }).select('_id').exec();
+      
+      const projectIds = adminProjects.map(p => p._id.toString());
+      
+      if (projectIds.length === 0) {
+        // Admin has no projects, return empty
+        return {
+          tickets: [],
+          total: 0,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: 0,
+        };
+      }
+      
+      filter.projectId = { $in: projectIds };
+    }
+    // Superadmin, QA, Developer see all tickets (or implement their own logic)
+    
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
-    if (projectId) filter.projectId = projectId;
+    if (projectId) {
+      // If specific projectId is requested, use it (but still respect admin filter)
+      if (filter.projectId) {
+        // Check if requested projectId is in admin's allowed projects
+        if (filter.projectId.$in.includes(projectId)) {
+          filter.projectId = projectId;
+        } else {
+          // Admin trying to access project they're not part of
+          return {
+            tickets: [],
+            total: 0,
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: 0,
+          };
+        }
+      } else {
+        filter.projectId = projectId;
+      }
+    }
 
     const skip = (page - 1) * limit;
     const [tickets, total] = await Promise.all([
@@ -60,11 +109,28 @@ export class TicketsService {
     };
   }
 
-  async findById(id: string): Promise<any> {
+  async findById(id: string, user?: any): Promise<any> {
     const ticket = await this.ticketModel.findById(id).exec();
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
+    
+    // Check if admin has access to this ticket's project
+    if (user && user.role === 'admin') {
+      const project = await this.projectModel.findById(ticket.projectId).exec();
+      if (project) {
+        const hasAccess = 
+          project.createdBy.toString() === user.id ||
+          project.teamMembers.some(member => member.userId.toString() === user.id);
+        
+        if (!hasAccess) {
+          throw new NotFoundException('Ticket not found');
+        }
+      } else {
+        throw new NotFoundException('Ticket not found');
+      }
+    }
+    
     return ticket.toJSON();
   }
 

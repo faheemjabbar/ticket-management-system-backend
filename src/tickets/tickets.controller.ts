@@ -22,20 +22,20 @@ export class TicketsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all tickets' })
-  async findAll(@Query() query: any) {
-    return this.ticketsService.findAll(query);
+  async findAll(@Query() query: any, @CurrentUser() user: any) {
+    return this.ticketsService.findAll(query, user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get ticket by ID' })
-  async findOne(@Param('id', ParseObjectIdPipe) id: string) {
-    return this.ticketsService.findById(id);
+  async findOne(@Param('id', ParseObjectIdPipe) id: string, @CurrentUser() user: any) {
+    return this.ticketsService.findById(id, user);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create ticket' })
   async create(@Body() createTicketDto: CreateTicketDto, @CurrentUser() user: any) {
-    const project = await this.projectsService.findById(createTicketDto.projectId);
+    const project = await this.projectsService.findById(createTicketDto.projectId, user);
     return this.ticketsService.create(createTicketDto, user, project.name);
   }
 

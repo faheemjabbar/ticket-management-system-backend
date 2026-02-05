@@ -32,6 +32,12 @@ export class User {
   @Prop({ default: 'en' })
   language: string;
 
+  @Prop()
+  resetPasswordToken?: string;
+
+  @Prop()
+  resetPasswordExpires?: Date;
+
   @Prop({ type: Date, default: null })
   lastLogin: Date;
 
