@@ -40,7 +40,7 @@ Create a `.env` file:
 
 ```env
 PORT=5050
-MONGODB_URI=mongodb+srv://user:password@cluster.mongodb.net/tickflow
+MONGODB_URI=mongodb+srv://dbuser:dbpassword@cluster.mongodb.net/your-db-name
 JWT_SECRET=your-secret-key
 FRONTEND_URL=http://localhost:3000
 
