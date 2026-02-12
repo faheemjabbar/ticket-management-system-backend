@@ -18,14 +18,22 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
-    
-    const user = await this.usersService.create({
-      ...registerDto,
-      password: hashedPassword,
-    });
+    // Password will be hashed by pre-save hook
+    const user = await this.usersService.create(registerDto);
 
-    const payload = { userId: user.id, email: user.email, role: user.role };
+    // Get organization name if user has organizationId
+    let organizationName = null;
+    if (user.organizationId) {
+      const userWithOrg = await this.usersService.findById(user.id);
+      organizationName = userWithOrg.organization?.name || null;
+    }
+
+    const payload = { 
+      userId: user.id, 
+      email: user.email, 
+      role: user.role,
+      organizationId: user.organizationId 
+    };
     const access_token = this.jwtService.sign(payload);
 
     return {
@@ -35,6 +43,10 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        organization: user.organizationId ? {
+          id: user.organizationId,
+          name: organizationName,
+        } : null,
         isActive: user.isActive,
       },
     };
@@ -60,7 +72,19 @@ export class AuthService {
     // Update last login
     await this.usersService.updateLastLogin(user.id);
 
-    const payload = { userId: user.id, email: user.email, role: user.role };
+    // Get organization name if user has organizationId
+    let organizationName = null;
+    if (user.organizationId) {
+      const userWithOrg = await this.usersService.findById(user.id);
+      organizationName = userWithOrg.organization?.name || null;
+    }
+
+    const payload = { 
+      userId: user.id, 
+      email: user.email, 
+      role: user.role,
+      organizationId: user.organizationId 
+    };
     const access_token = this.jwtService.sign(payload);
 
     return {
@@ -70,6 +94,10 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        organization: user.organizationId ? {
+          id: user.organizationId,
+          name: organizationName,
+        } : null,
         isActive: user.isActive,
       },
     };
