@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
+import * as bcrypt from 'bcrypt';
 
 export type UserDocument = User & Document;
 
@@ -16,6 +17,12 @@ export class User {
 
   @Prop({ required: true, enum: ['superadmin', 'admin', 'developer', 'qa'], default: 'developer' })
   role: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Organization' })
+  organizationId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy: Types.ObjectId;
 
   @Prop({ default: null })
   avatar: string;
@@ -71,11 +78,34 @@ export class User {
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// Indexes (email index is already created by unique: true)
+// Pre-save hook to validate organizationId based on role
+UserSchema.pre('save', function() {
+  if (this.role !== 'superadmin' && !this.organizationId) {
+    throw new Error('organizationId is required for non-superadmin users');
+  }
+});
+
+// Password hashing middleware
+UserSchema.pre('save', async function() {
+  // Only hash if password is modified or new
+  if (!this.isModified('password')) {
+    return;
+  }
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  } catch (error) {
+    throw new Error('Error hashing password');
+  }
+});
+
+// Indexes
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
+UserSchema.index({ organizationId: 1 });
 
-// Transform _id to id and remove sensitive fields
+// Transform
 UserSchema.set('toJSON', {
   transform: (doc, ret) => {
     (ret as any).id = ret._id.toString();
