@@ -29,24 +29,24 @@ export class ProjectsController {
   }
 
   @Post()
-  @Roles('superadmin', 'admin', 'qa')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Create project' })
   async create(@Body() createProjectDto: CreateProjectDto, @CurrentUser() user: any) {
-    return this.projectsService.create(createProjectDto, user.id);
+    return this.projectsService.create(createProjectDto, user.id, user.organizationId);
   }
 
   @Put(':id')
-  @Roles('superadmin', 'admin', 'qa')
+  @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Update project' })
-  async update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto) {
-    return this.projectsService.update(id, updateProjectDto);
+  async update(@Param('id') id: string, @Body() updateProjectDto: UpdateProjectDto, @CurrentUser() user: any) {
+    return this.projectsService.update(id, updateProjectDto, user);
   }
 
   @Delete(':id')
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Delete project' })
-  async delete(@Param('id') id: string) {
-    await this.projectsService.delete(id);
+  async delete(@Param('id') id: string, @CurrentUser() user: any) {
+    await this.projectsService.delete(id, user);
     return { message: 'Project deleted successfully' };
   }
 }
