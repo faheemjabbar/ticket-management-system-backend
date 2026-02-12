@@ -1,8 +1,7 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
-import { Project, ProjectDocument } from '../projects/schemas/project.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -10,14 +9,33 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
   ) {}
 
-  async create(createUserDto: CreateUserDto | any): Promise<any> {
+  async create(createUserDto: CreateUserDto | any, createdBy?: string): Promise<any> {
     try {
-      const user = new this.userModel(createUserDto);
+      const userData: any = { ...createUserDto };
+      if (createdBy) {
+        userData.createdBy = createdBy;
+      }
+      
+      // Password will be hashed by pre-save hook
+      const user = new this.userModel(userData);
       const savedUser = await user.save();
-      return savedUser.toJSON();
+      
+      // Populate organization name
+      await savedUser.populate('organizationId', 'name');
+      
+      const userObj: any = savedUser.toJSON();
+      // Transform organizationId to organization object
+      if (userObj.organizationId && typeof userObj.organizationId === 'object') {
+        userObj.organization = {
+          id: userObj.organizationId.id || userObj.organizationId._id,
+          name: userObj.organizationId.name,
+        };
+        delete userObj.organizationId;
+      }
+      
+      return userObj;
     } catch (error) {
       if (error.code === 11000) {
         throw new ConflictException('Email already exists');
@@ -31,31 +49,29 @@ export class UsersService {
     
     const filter: any = {};
     
-    // Role-based filtering: Admins and QAs only see users from their assigned projects
-    if (user && (user.role === 'admin' || user.role === 'qa')) {
-      // Find all projects where the user is involved (created by them or they're a team member)
-      const projects = await this.projectModel.find({
-        $or: [
-          { createdBy: user.id },
-          { 'teamMembers.userId': user.id }
-        ]
-      }).exec();
-      
-      // Extract all unique user IDs from team members
-      const teamMemberIds = new Set<string>();
-      projects.forEach(project => {
-        // Add the project creator
-        teamMemberIds.add(project.createdBy.toString());
-        // Add all team members
-        project.teamMembers.forEach(member => {
-          teamMemberIds.add(member.userId.toString());
-        });
-      });
-      
-      // Filter users to only include team members
-      filter._id = { $in: Array.from(teamMemberIds) };
+    // Organization-based filtering
+    if (user) {
+      if (user.role === 'admin') {
+        // Admin sees only users in their organization
+        // Convert to ObjectId to match both string and ObjectId in database
+        const orgId = user.organizationId;
+        filter.$or = [
+          { organizationId: orgId },
+          { organizationId: orgId.toString() },
+          { organizationId: new Types.ObjectId(orgId.toString()) }
+        ];
+      } else if (user.role === 'superadmin') {
+        // Superadmin sees all users
+      } else {
+        // QA and Developer see users in their organization
+        const orgId = user.organizationId;
+        filter.$or = [
+          { organizationId: orgId },
+          { organizationId: orgId.toString() },
+          { organizationId: new Types.ObjectId(orgId.toString()) }
+        ];
+      }
     }
-    // Superadmin and Developer see all users
     
     if (role) filter.role = role;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
@@ -66,8 +82,7 @@ export class UsersService {
           { email: { $regex: search, $options: 'i' } },
         ]
       };
-      
-      // Combine with existing filter if needed
+      // Combine with existing $or if present
       if (filter.$or) {
         filter.$and = [
           { $or: filter.$or },
@@ -75,18 +90,34 @@ export class UsersService {
         ];
         delete filter.$or;
       } else {
-        Object.assign(filter, searchFilter);
+        filter.$or = searchFilter.$or;
       }
     }
 
     const skip = (page - 1) * limit;
     const [users, total] = await Promise.all([
-      this.userModel.find(filter).skip(skip).limit(Number(limit)).exec(),
+      this.userModel
+        .find(filter)
+        .populate('organizationId', 'name')
+        .skip(skip)
+        .limit(Number(limit))
+        .exec(),
       this.userModel.countDocuments(filter),
     ]);
 
     return {
-      users: users.map(u => u.toJSON()),
+      users: users.map(u => {
+        const userObj: any = u.toJSON();
+        // Transform organizationId to organization object
+        if (userObj.organizationId && typeof userObj.organizationId === 'object') {
+          userObj.organization = {
+            id: userObj.organizationId.id || userObj.organizationId._id,
+            name: userObj.organizationId.name,
+          };
+          delete userObj.organizationId;
+        }
+        return userObj;
+      }),
       total,
       page: Number(page),
       limit: Number(limit),
@@ -94,12 +125,45 @@ export class UsersService {
     };
   }
 
-  async findById(id: string): Promise<any> {
-    const user = await this.userModel.findById(id).exec();
-    if (!user) {
+  async findById(id: string, user?: any): Promise<any> {
+    const foundUser = await this.userModel
+      .findById(id)
+      .populate('organizationId', 'name')
+      .exec();
+      
+    if (!foundUser) {
       throw new NotFoundException('User not found');
     }
-    return user.toJSON();
+
+    // Check access
+    if (user && user.role !== 'superadmin') {
+      const orgId = foundUser.organizationId?.toString() || (foundUser.organizationId as any)?._id?.toString();
+      if (orgId !== user.organizationId && user.id !== id) {
+        throw new ForbiddenException('Access denied');
+      }
+    }
+
+    const userObj: any = foundUser.toJSON();
+    // Transform organizationId to organization object
+    if (userObj.organizationId && typeof userObj.organizationId === 'object') {
+      userObj.organization = {
+        id: userObj.organizationId.id || userObj.organizationId._id,
+        name: userObj.organizationId.name,
+      };
+      delete userObj.organizationId;
+    }
+    
+    return userObj;
+  }
+
+  // Internal method for JWT validation - returns raw user data without transformation
+  async findByIdForAuth(id: string): Promise<any> {
+    const user = await this.userModel.findById(id).exec();
+    if (!user) {
+      return null;
+    }
+    const userObj: any = user.toJSON();
+    return userObj;
   }
 
   async findByEmail(email: string): Promise<any> {
@@ -113,12 +177,24 @@ export class UsersService {
   async update(id: string, updateUserDto: UpdateUserDto): Promise<any> {
     const user = await this.userModel
       .findByIdAndUpdate(id, updateUserDto, { new: true })
+      .populate('organizationId', 'name')
       .exec();
     
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    return user.toJSON();
+    
+    const userObj: any = user.toJSON();
+    // Transform organizationId to organization object
+    if (userObj.organizationId && typeof userObj.organizationId === 'object') {
+      userObj.organization = {
+        id: userObj.organizationId.id || userObj.organizationId._id,
+        name: userObj.organizationId.name,
+      };
+      delete userObj.organizationId;
+    }
+    
+    return userObj;
   }
 
   async delete(id: string): Promise<void> {
@@ -136,7 +212,20 @@ export class UsersService {
     
     user.isActive = !user.isActive;
     await user.save();
-    return user.toJSON();
+    
+    // Populate and transform
+    await user.populate('organizationId', 'name');
+    const userObj: any = user.toJSON();
+    
+    if (userObj.organizationId && typeof userObj.organizationId === 'object') {
+      userObj.organization = {
+        id: userObj.organizationId.id || userObj.organizationId._id,
+        name: userObj.organizationId.name,
+      };
+      delete userObj.organizationId;
+    }
+    
+    return userObj;
   }
 
   async updateLastLogin(id: string): Promise<void> {
@@ -181,7 +270,7 @@ export class UsersService {
     const user = await this.userModel
       .findOne({
         resetPasswordToken: token,
-        resetPasswordExpires: { $gt: new Date() }, // Token not expired
+        resetPasswordExpires: { $gt: new Date() },
       })
       .select('+password')
       .exec();
