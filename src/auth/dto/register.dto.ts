@@ -1,4 +1,4 @@
-import { IsEmail, IsString, MinLength, IsEnum, IsOptional } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsEnum, IsOptional, IsMongoId } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterDto {
@@ -13,11 +13,16 @@ export class RegisterDto {
 
   @ApiProperty({ example: 'SecurePass123!' })
   @IsString()
-  @MinLength(8)
+  @MinLength(6)
   password: string;
 
-  @ApiProperty({ example: 'developer', enum: ['superadmin', 'admin', 'developer', 'qa'] })
+  @ApiProperty({ example: 'developer', enum: ['admin', 'developer', 'qa'] })
   @IsOptional()
-  @IsEnum(['superadmin', 'admin', 'developer', 'qa'])
+  @IsEnum(['admin', 'developer', 'qa'])
   role?: string;
+
+  @ApiProperty({ example: '507f1f77bcf86cd799439011', required: false })
+  @IsOptional()
+  @IsMongoId()
+  organizationId?: string;
 }
