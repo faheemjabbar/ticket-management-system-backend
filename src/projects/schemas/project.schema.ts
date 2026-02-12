@@ -10,7 +10,7 @@ class TeamMember {
   @Prop({ required: true })
   userName: string;
 
-  @Prop({ required: true, enum: ['superadmin', 'admin', 'qa', 'developer'] })
+  @Prop({ required: true, enum: ['admin', 'qa', 'developer'] })
   role: string;
 
   @Prop({ type: Date, default: Date.now })
@@ -27,6 +27,9 @@ export class Project {
 
   @Prop({ required: true, enum: ['active', 'completed', 'archived'], default: 'active' })
   status: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Organization', required: true })
+  organizationId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   createdBy: Types.ObjectId;
@@ -45,6 +48,7 @@ export const ProjectSchema = SchemaFactory.createForClass(Project);
 
 // Indexes
 ProjectSchema.index({ status: 1 });
+ProjectSchema.index({ organizationId: 1 });
 ProjectSchema.index({ createdBy: 1 });
 ProjectSchema.index({ 'teamMembers.userId': 1 });
 
