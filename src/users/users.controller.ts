@@ -26,18 +26,18 @@ export class UsersController {
   @Get(':id')
   @ApiOperation({ summary: 'Get user by ID' })
   async findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    // Superadmin, Admin or self can view
-    if (user.role !== 'superadmin' && user.role !== 'admin' && user.id !== id) {
-      throw new ForbiddenException('You do not have permission to access this resource');
-    }
-    return this.usersService.findById(id);
+    return this.usersService.findById(id, user);
   }
 
   @Post()
   @Roles('superadmin', 'admin')
   @ApiOperation({ summary: 'Create user' })
-  async create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  async create(@Body() createUserDto: CreateUserDto, @CurrentUser() user: any) {
+    // Set organizationId from current user if not provided
+    if (!createUserDto.organizationId && user.role === 'admin') {
+      createUserDto.organizationId = user.organizationId;
+    }
+    return this.usersService.create(createUserDto, user.id);
   }
 
   @Put(':id')
