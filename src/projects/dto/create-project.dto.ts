@@ -1,14 +1,14 @@
-import { IsString, IsEnum, IsArray, IsDateString, IsOptional, ValidateNested } from 'class-validator';
+import { IsString, IsEnum, IsArray, IsDateString, IsOptional, ValidateNested, IsMongoId } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 class TeamMemberDto {
   @ApiProperty()
-  @IsString()
+  @IsMongoId()
   userId: string;
 
-  @ApiProperty({ enum: ['superadmin', 'admin', 'qa', 'developer'] })
-  @IsEnum(['superadmin', 'admin', 'qa', 'developer'])
+  @ApiProperty({ enum: ['admin', 'qa', 'developer'] })
+  @IsEnum(['admin', 'qa', 'developer'])
   role: string;
 }
 
@@ -34,9 +34,10 @@ export class CreateProjectDto {
   @IsDateString()
   endDate?: string;
 
-  @ApiProperty({ type: [TeamMemberDto] })
+  @ApiProperty({ type: [TeamMemberDto], required: false })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => TeamMemberDto)
-  teamMembers: TeamMemberDto[];
+  teamMembers?: TeamMemberDto[];
 }
