@@ -2,13 +2,13 @@ import { IsString, IsNotEmpty, IsOptional, IsEmail, MinLength, ValidateNested } 
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
-class AdminUserDto {
+class ProjectManagerDto {
   @ApiProperty({ example: 'John Doe' })
   @IsString()
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 'admin@acme.com' })
+  @ApiProperty({ example: 'pm@acme.com' })
   @IsEmail()
   @IsNotEmpty()
   email: string;
@@ -30,8 +30,8 @@ export class CreateOrganizationWithAdminDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ type: AdminUserDto })
+  @ApiProperty({ type: ProjectManagerDto })
   @ValidateNested()
-  @Type(() => AdminUserDto)
-  adminUser: AdminUserDto;
+  @Type(() => ProjectManagerDto)
+  projectManager: ProjectManagerDto;
 }

@@ -61,16 +61,14 @@ export class ProjectsService {
     
     // Organization-based filtering
     if (user) {
-      if (user.role === 'admin') {
-        // Admin sees only projects in their organization
+      if (user.role === 'project-manager') {
+        // Project Manager sees only projects in their organization
         const orgId = user.organizationId;
         filter.$or = [
           { organizationId: orgId },
           { organizationId: orgId.toString() },
           { organizationId: new Types.ObjectId(orgId.toString()) }
         ];
-      } else if (user.role === 'superadmin') {
-        // Superadmin sees all projects
       } else {
         // QA and Developer see projects in their organization
         const orgId = user.organizationId;
@@ -144,7 +142,7 @@ export class ProjectsService {
     }
     
     // Check access
-    if (user && user.role !== 'superadmin') {
+    if (user && user.role !== 'admin') {
       // Extract the actual ObjectId from populated field
       const projectOrgId = (project.organizationId as any)?._id || project.organizationId;
       const orgId = projectOrgId?.toString();
@@ -175,7 +173,7 @@ export class ProjectsService {
     }
 
     // Check access
-    if (user && user.role !== 'superadmin') {
+    if (user && user.role !== 'admin') {
       const orgId = project.organizationId?.toString();
       const userOrgId = user.organizationId?.toString();
       if (orgId !== userOrgId) {
@@ -229,7 +227,7 @@ export class ProjectsService {
     }
 
     // Check access
-    if (user && user.role !== 'superadmin') {
+    if (user && user.role !== 'admin') {
       const orgId = project.organizationId?.toString();
       const userOrgId = user.organizationId?.toString();
       if (orgId !== userOrgId) {

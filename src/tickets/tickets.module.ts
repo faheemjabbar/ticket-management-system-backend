@@ -4,8 +4,7 @@ import { TicketsController } from './tickets.controller';
 import { TicketsService } from './tickets.service';
 import { Ticket, TicketSchema } from './schemas/ticket.schema';
 import { Project, ProjectSchema } from '../projects/schemas/project.schema';
-import { NotificationsModule } from '../notifications/notifications.module';
-import { ActivitiesModule } from '../activities/activities.module';
+import { User, UserSchema } from '../users/schemas/user.schema';
 import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
@@ -13,10 +12,9 @@ import { ProjectsModule } from '../projects/projects.module';
     MongooseModule.forFeature([
       { name: Ticket.name, schema: TicketSchema },
       { name: Project.name, schema: ProjectSchema },
+      { name: User.name, schema: UserSchema },
     ]),
-    NotificationsModule,
-    ActivitiesModule,
-    ProjectsModule, // Import ProjectsModule to access ProjectsService
+    ProjectsModule,
   ],
   controllers: [TicketsController],
   providers: [TicketsService],

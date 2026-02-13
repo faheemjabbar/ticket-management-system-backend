@@ -17,36 +17,36 @@ export class OrganizationsController {
   constructor(private readonly organizationsService: OrganizationsService) {}
 
   @Get()
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Get all organizations (Superadmin only)' })
+  @Roles('admin')
+  @ApiOperation({ summary: 'Get all organizations (Admin only)' })
   async findAll() {
     return this.organizationsService.findAll();
   }
 
   @Get(':id')
-  @Roles('superadmin', 'admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Get organization by ID' })
   async findOne(@Param('id') id: string) {
     return this.organizationsService.findById(id);
   }
 
   @Get(':id/stats')
-  @Roles('superadmin', 'admin')
+  @Roles('admin')
   @ApiOperation({ summary: 'Get organization statistics' })
   async getStats(@Param('id') id: string) {
     return this.organizationsService.getStats(id);
   }
 
   @Post()
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Create organization (Superadmin only)' })
+  @Roles('admin')
+  @ApiOperation({ summary: 'Create organization (Admin only)' })
   async create(@Body() createOrganizationDto: CreateOrganizationDto, @CurrentUser() user: any) {
     return this.organizationsService.create(createOrganizationDto, user.id);
   }
 
   @Post('with-admin')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Create organization with admin user (Superadmin only)' })
+  @Roles('admin')
+  @ApiOperation({ summary: 'Create organization with project manager user (Admin only)' })
   async createWithAdmin(
     @Body() createDto: CreateOrganizationWithAdminDto,
     @CurrentUser() user: any,
@@ -55,15 +55,15 @@ export class OrganizationsController {
   }
 
   @Put(':id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Update organization (Superadmin only)' })
+  @Roles('admin')
+  @ApiOperation({ summary: 'Update organization (Admin only)' })
   async update(@Param('id') id: string, @Body() updateOrganizationDto: UpdateOrganizationDto) {
     return this.organizationsService.update(id, updateOrganizationDto);
   }
 
   @Delete(':id')
-  @Roles('superadmin')
-  @ApiOperation({ summary: 'Delete organization (Superadmin only)' })
+  @Roles('admin')
+  @ApiOperation({ summary: 'Delete organization (Admin only)' })
   async delete(@Param('id') id: string) {
     await this.organizationsService.delete(id);
     return { message: 'Organization deleted successfully' };

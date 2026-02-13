@@ -7,8 +7,8 @@ class TeamMemberDto {
   @IsMongoId()
   userId: string;
 
-  @ApiProperty({ enum: ['admin', 'qa', 'developer'] })
-  @IsEnum(['admin', 'qa', 'developer'])
+  @ApiProperty({ enum: ['project-manager', 'qa', 'developer'] })
+  @IsEnum(['project-manager', 'qa', 'developer'])
   role: string;
 }
 

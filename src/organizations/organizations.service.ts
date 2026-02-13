@@ -15,10 +15,10 @@ export class OrganizationsService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
-  async create(createOrganizationDto: CreateOrganizationDto, superadminId: string): Promise<any> {
+  async create(createOrganizationDto: CreateOrganizationDto, adminId: string): Promise<any> {
     const organization = new this.organizationModel({
       ...createOrganizationDto,
-      createdBy: superadminId,
+      createdBy: adminId,
     });
     const saved = await organization.save();
     return saved.toJSON();
@@ -26,10 +26,10 @@ export class OrganizationsService {
 
   async createWithAdmin(
     createDto: CreateOrganizationWithAdminDto,
-    superadminId: string,
+    adminId: string,
   ): Promise<any> {
     // Check if email already exists
-    const existingUser = await this.userModel.findOne({ email: createDto.adminUser.email }).exec();
+    const existingUser = await this.userModel.findOne({ email: createDto.projectManager.email }).exec();
     if (existingUser) {
       throw new BadRequestException('Email already exists');
     }
@@ -38,34 +38,34 @@ export class OrganizationsService {
     const organization = new this.organizationModel({
       name: createDto.name,
       description: createDto.description,
-      createdBy: superadminId,
+      createdBy: adminId,
     });
 
     let savedOrganization;
-    let savedAdmin;
+    let savedPM;
 
     try {
       // Save organization
       savedOrganization = await organization.save();
 
-      // Create admin user (password will be hashed by pre-save hook)
-      const adminUser = new this.userModel({
-        name: createDto.adminUser.name,
-        email: createDto.adminUser.email,
-        password: createDto.adminUser.password,
-        role: 'admin',
+      // Create project manager user (password will be hashed by pre-save hook)
+      const pmUser = new this.userModel({
+        name: createDto.projectManager.name,
+        email: createDto.projectManager.email,
+        password: createDto.projectManager.password,
+        role: 'project-manager',
         organizationId: savedOrganization._id,
-        createdBy: superadminId,
+        createdBy: adminId,
       });
 
-      savedAdmin = await adminUser.save();
+      savedPM = await pmUser.save();
 
       return {
         organization: savedOrganization.toJSON(),
-        admin: savedAdmin.toJSON(),
+        projectManager: savedPM.toJSON(),
       };
     } catch (error) {
-      // Rollback: Delete organization if admin creation fails
+      // Rollback: Delete organization if project manager creation fails
       if (savedOrganization) {
         await this.organizationModel.findByIdAndDelete(savedOrganization._id).exec();
       }

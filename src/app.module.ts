@@ -10,8 +10,6 @@ import { TicketsModule } from './tickets/tickets.module';
 import { CommentsModule } from './comments/comments.module';
 import { TicketHistoryModule } from './ticket-history/ticket-history.module';
 import { UploadModule } from './upload/upload.module';
-import { NotificationsModule } from './notifications/notifications.module';
-import { ActivitiesModule } from './activities/activities.module';
 import { MailModule } from './mail/mail.module';
 
 @Module({
@@ -46,8 +44,6 @@ import { MailModule } from './mail/mail.module';
     CommentsModule,
     TicketHistoryModule,
     UploadModule,
-    NotificationsModule,
-    ActivitiesModule,
     MailModule,
   ],
 })

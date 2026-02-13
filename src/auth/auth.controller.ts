@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterAdminDto } from './dto/register-admin.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -13,10 +13,10 @@ import { CurrentUser } from './decorators/current-user.decorator';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @Post('register')
-  @ApiOperation({ summary: 'Register new user' })
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  @Post('register-admin')
+  @ApiOperation({ summary: 'Register admin user (public endpoint)' })
+  async registerAdmin(@Body() registerAdminDto: RegisterAdminDto) {
+    return this.authService.registerAdmin(registerAdminDto);
   }
 
   @Post('login')

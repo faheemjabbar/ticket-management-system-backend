@@ -17,7 +17,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('superadmin', 'admin', 'qa')
+  @Roles('project-manager', 'qa')
   @ApiOperation({ summary: 'Get all users' })
   async findAll(@Query() query: any, @CurrentUser() user: any) {
     return this.usersService.findAll(query, user);
@@ -30,11 +30,11 @@ export class UsersController {
   }
 
   @Post()
-  @Roles('superadmin', 'admin')
+  @Roles('project-manager')
   @ApiOperation({ summary: 'Create user' })
   async create(@Body() createUserDto: CreateUserDto, @CurrentUser() user: any) {
     // Set organizationId from current user if not provided
-    if (!createUserDto.organizationId && user.role === 'admin') {
+    if (!createUserDto.organizationId && user.role === 'project-manager') {
       createUserDto.organizationId = user.organizationId;
     }
     return this.usersService.create(createUserDto, user.id);
@@ -47,15 +47,15 @@ export class UsersController {
     @Body() updateUserDto: UpdateUserDto,
     @CurrentUser() user: any,
   ) {
-    // Superadmin, Admin or self can update
-    if (user.role !== 'superadmin' && user.role !== 'admin' && user.id !== id) {
+    // Project Manager or self can update
+    if (user.role !== 'project-manager' && user.id !== id) {
       throw new ForbiddenException('You do not have permission to update this resource');
     }
     return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
-  @Roles('superadmin', 'admin')
+  @Roles('project-manager')
   @ApiOperation({ summary: 'Delete user' })
   async delete(@Param('id') id: string) {
     await this.usersService.delete(id);
@@ -63,7 +63,7 @@ export class UsersController {
   }
 
   @Patch(':id/toggle-status')
-  @Roles('superadmin', 'admin')
+  @Roles('project-manager')
   @ApiOperation({ summary: 'Toggle user status' })
   async toggleStatus(@Param('id') id: string) {
     return this.usersService.toggleStatus(id);
@@ -76,8 +76,8 @@ export class UsersController {
     @Body() preferences: NotificationPreferencesDto,
     @CurrentUser() user: any,
   ) {
-    // Superadmin, Admin or self can update
-    if (user.role !== 'superadmin' && user.role !== 'admin' && user.id !== id) {
+    // Project Manager or self can update
+    if (user.role !== 'project-manager' && user.id !== id) {
       throw new ForbiddenException('You do not have permission to update notification preferences');
     }
     return this.usersService.updateNotificationPreferences(id, preferences);
@@ -89,8 +89,8 @@ export class UsersController {
     @Param('id') id: string,
     @CurrentUser() user: any,
   ) {
-    // Superadmin, Admin or self can view
-    if (user.role !== 'superadmin' && user.role !== 'admin' && user.id !== id) {
+    // Project Manager or self can view
+    if (user.role !== 'project-manager' && user.id !== id) {
       throw new ForbiddenException('You do not have permission to access notification preferences');
     }
     return this.usersService.getNotificationPreferences(id);

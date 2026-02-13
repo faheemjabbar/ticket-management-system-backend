@@ -51,8 +51,8 @@ export class UsersService {
     
     // Organization-based filtering
     if (user) {
-      if (user.role === 'admin') {
-        // Admin sees only users in their organization
+      if (user.role === 'project-manager') {
+        // Project Manager sees only users in their organization
         // Convert to ObjectId to match both string and ObjectId in database
         const orgId = user.organizationId;
         filter.$or = [
@@ -60,8 +60,6 @@ export class UsersService {
           { organizationId: orgId.toString() },
           { organizationId: new Types.ObjectId(orgId.toString()) }
         ];
-      } else if (user.role === 'superadmin') {
-        // Superadmin sees all users
       } else {
         // QA and Developer see users in their organization
         const orgId = user.organizationId;
@@ -136,9 +134,10 @@ export class UsersService {
     }
 
     // Check access
-    if (user && user.role !== 'superadmin') {
+    if (user && user.role !== 'admin') {
       const orgId = foundUser.organizationId?.toString() || (foundUser.organizationId as any)?._id?.toString();
-      if (orgId !== user.organizationId && user.id !== id) {
+      const userOrgId = user.organizationId?.toString();
+      if (orgId !== userOrgId && user.id !== id) {
         throw new ForbiddenException('Access denied');
       }
     }

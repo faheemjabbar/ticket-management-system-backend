@@ -4,7 +4,7 @@ import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterAdminDto } from './dto/register-admin.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -17,37 +17,36 @@ export class AuthService {
     private mailService: MailService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
-    // Password will be hashed by pre-save hook
-    const user = await this.usersService.create(registerDto);
-
-    // Get organization name if user has organizationId
-    let organizationName = null;
-    if (user.organizationId) {
-      const userWithOrg = await this.usersService.findById(user.id);
-      organizationName = userWithOrg.organization?.name || null;
+  async registerAdmin(registerAdminDto: RegisterAdminDto) {
+    // Check if any admin already exists
+    const existingAdmins = await this.usersService.findAll({ role: 'admin' }, null);
+    
+    if (existingAdmins.total > 0) {
+      throw new BadRequestException('Admin user already exists. Only one admin is allowed.');
     }
 
+    // Create admin user (password will be hashed by pre-save hook)
+    const admin = await this.usersService.create({
+      ...registerAdminDto,
+      role: 'admin',
+      // Admin doesn't need organizationId
+    });
+
     const payload = { 
-      userId: user.id, 
-      email: user.email, 
-      role: user.role,
-      organizationId: user.organizationId 
+      userId: admin.id, 
+      email: admin.email, 
+      role: admin.role,
     };
     const access_token = this.jwtService.sign(payload);
 
     return {
       access_token,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        organization: user.organizationId ? {
-          id: user.organizationId,
-          name: organizationName,
-        } : null,
-        isActive: user.isActive,
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role,
+        isActive: admin.isActive,
       },
     };
   }

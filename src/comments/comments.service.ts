@@ -4,13 +4,11 @@ import { Model } from 'mongoose';
 import { Comment, CommentDocument } from './schemas/comment.schema';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
-import { ActivitiesService } from '../activities/activities.service';
 
 @Injectable()
 export class CommentsService {
   constructor(
     @InjectModel(Comment.name) private commentModel: Model<CommentDocument>,
-    private activitiesService: ActivitiesService,
   ) {}
 
   async create(ticketId: string, createCommentDto: CreateCommentDto, user: any, ticketTitle?: string): Promise<any> {
@@ -21,19 +19,7 @@ export class CommentsService {
       authorName: user.name,
     });
     const savedComment = await comment.save();
-    const commentJson = savedComment.toJSON();
-
-    // Log activity (ticketTitle should be passed from controller)
-    if (ticketTitle) {
-      await this.activitiesService.logCommentAdded(
-        ticketId,
-        ticketTitle,
-        user.id,
-        user.name,
-      );
-    }
-
-    return commentJson;
+    return savedComment.toJSON();
   }
 
   async findByTicketId(ticketId: string): Promise<any[]> {

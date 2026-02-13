@@ -15,7 +15,7 @@ export class User {
   @Prop({ required: true, select: false })
   password: string;
 
-  @Prop({ required: true, enum: ['superadmin', 'admin', 'developer', 'qa'], default: 'developer' })
+  @Prop({ required: true, enum: ['admin', 'project-manager', 'developer', 'qa'], default: 'developer' })
   role: string;
 
   @Prop({ type: Types.ObjectId, ref: 'Organization' })
@@ -80,8 +80,8 @@ export const UserSchema = SchemaFactory.createForClass(User);
 
 // Pre-save hook to validate organizationId based on role
 UserSchema.pre('save', function() {
-  if (this.role !== 'superadmin' && !this.organizationId) {
-    throw new Error('organizationId is required for non-superadmin users');
+  if (this.role !== 'admin' && !this.organizationId) {
+    throw new Error('organizationId is required for non-admin users');
   }
 });
 

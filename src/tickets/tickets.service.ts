@@ -1,40 +1,91 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Ticket, TicketDocument } from './schemas/ticket.schema';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
-import { NotificationsService } from '../notifications/notifications.service';
-import { ActivitiesService } from '../activities/activities.service';
 import { Project, ProjectDocument } from '../projects/schemas/project.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 
 @Injectable()
 export class TicketsService {
   constructor(
     @InjectModel(Ticket.name) private ticketModel: Model<TicketDocument>,
     @InjectModel(Project.name) private projectModel: Model<ProjectDocument>,
-    private notificationsService: NotificationsService,
-    private activitiesService: ActivitiesService,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
+  /**
+   * Validates that a user can be assigned to a ticket in a project
+   * Rules:
+   * 1. User must be a member of the project team
+   * 2. User must be in the same organization as the project
+   * 3. User must have developer or qa role (not admin)
+   */
+  private async validateTicketAssignment(projectId: string, assignedToId: string): Promise<void> {
+    // Get the project
+    const project = await this.projectModel.findById(projectId).exec();
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    // Get the user
+    const user = await this.userModel.findById(assignedToId).exec();
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if user is in the same organization as the project
+    const userOrgId = user.organizationId?.toString();
+    const projectOrgId = project.organizationId?.toString();
+    
+    if (userOrgId !== projectOrgId) {
+      throw new BadRequestException('Cannot assign ticket: User is not in the same organization as the project');
+    }
+
+    // Check if user has appropriate role (not project-manager)
+    if (user.role === 'project-manager') {
+      throw new BadRequestException('Cannot assign ticket: Project Manager users cannot be assigned to tickets');
+    }
+
+    // Check if user is a member of the project team
+    const isTeamMember = project.teamMembers.some(
+      member => member.userId.toString() === assignedToId
+    );
+
+    if (!isTeamMember) {
+      throw new BadRequestException('Cannot assign ticket: User is not a member of this project team');
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      throw new BadRequestException('Cannot assign ticket: User account is inactive');
+    }
+  }
+
   async create(createTicketDto: CreateTicketDto, user: any, projectName: string): Promise<any> {
+    // Validate assignment if assignedToId is provided
+    let assignedToName: string | null = null;
+    if (createTicketDto.assignedToId) {
+      await this.validateTicketAssignment(createTicketDto.projectId, createTicketDto.assignedToId);
+      
+      // Get assignee name
+      const assignee = await this.userModel.findById(createTicketDto.assignedToId).exec();
+      if (assignee) {
+        assignedToName = assignee.name;
+      }
+    }
+
     const ticket = new this.ticketModel({
       ...createTicketDto,
+      assignedToName,
       authorId: user.id,
       authorName: user.name,
       projectName,
-      status: 'pending',
+      status: createTicketDto.assignedToId ? 'assigned' : 'pending',
     });
     const savedTicket = await ticket.save();
     const ticketJson = savedTicket.toJSON() as any;
-
-    // Log activity
-    await this.activitiesService.logTicketCreated(
-      ticketJson.id,
-      ticketJson.title,
-      user.id,
-      user.name,
-    );
 
     return ticketJson;
   }
@@ -44,20 +95,20 @@ export class TicketsService {
     
     const filter: any = {};
     
-    // Role-based filtering: Admins only see tickets from their assigned projects
-    if (user && user.role === 'admin') {
-      // Get all project IDs where admin is involved
-      const adminProjects = await this.projectModel.find({
+    // Role-based filtering: Project Managers only see tickets from their assigned projects
+    if (user && user.role === 'project-manager') {
+      // Get all project IDs where project manager is involved
+      const pmProjects = await this.projectModel.find({
         $or: [
           { createdBy: user.id },
           { 'teamMembers.userId': user.id }
         ]
       }).select('_id').exec();
       
-      const projectIds = adminProjects.map(p => p._id.toString());
+      const projectIds = pmProjects.map(p => p._id.toString());
       
       if (projectIds.length === 0) {
-        // Admin has no projects, return empty
+        // Project Manager has no projects, return empty
         return {
           tickets: [],
           total: 0,
@@ -69,18 +120,18 @@ export class TicketsService {
       
       filter.projectId = { $in: projectIds };
     }
-    // Superadmin, QA, Developer see all tickets (or implement their own logic)
+    // Admin, QA, Developer see all tickets (or implement their own logic)
     
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (projectId) {
       // If specific projectId is requested, use it (but still respect admin filter)
       if (filter.projectId) {
-        // Check if requested projectId is in admin's allowed projects
+        // Check if requested projectId is in project manager's allowed projects
         if (filter.projectId.$in.includes(projectId)) {
           filter.projectId = projectId;
         } else {
-          // Admin trying to access project they're not part of
+          // Project Manager trying to access project they're not part of
           return {
             tickets: [],
             total: 0,
@@ -115,8 +166,8 @@ export class TicketsService {
       throw new NotFoundException('Ticket not found');
     }
     
-    // Check if admin has access to this ticket's project
-    if (user && user.role === 'admin') {
+    // Check if project manager has access to this ticket's project
+    if (user && user.role === 'project-manager') {
       const project = await this.projectModel.findById(ticket.projectId).exec();
       if (project) {
         const hasAccess = 
@@ -140,6 +191,11 @@ export class TicketsService {
       throw new NotFoundException('Ticket not found');
     }
 
+    // Validate assignment if assignedToId is being changed
+    if (updateTicketDto.assignedToId && updateTicketDto.assignedToId !== oldTicket.assignedToId?.toString()) {
+      await this.validateTicketAssignment(oldTicket.projectId.toString(), updateTicketDto.assignedToId);
+    }
+
     const ticket = await this.ticketModel
       .findByIdAndUpdate(id, updateTicketDto, { new: true })
       .exec();
@@ -148,31 +204,7 @@ export class TicketsService {
       throw new NotFoundException('Ticket not found');
     }
 
-    const ticketJson = ticket.toJSON() as any;
-
-    // Log activity for updates
-    const changes: string[] = [];
-    if (updateTicketDto.title && updateTicketDto.title !== oldTicket.title) {
-      changes.push('title');
-    }
-    if (updateTicketDto.description && updateTicketDto.description !== oldTicket.description) {
-      changes.push('description');
-    }
-    if (updateTicketDto.priority && updateTicketDto.priority !== oldTicket.priority) {
-      changes.push('priority');
-    }
-
-    if (changes.length > 0) {
-      await this.activitiesService.logTicketUpdated(
-        ticketJson.id,
-        ticketJson.title,
-        'System', // You can pass actual user from controller
-        'System',
-        `Updated ${changes.join(', ')}`,
-      );
-    }
-
-    return ticketJson;
+    return ticket.toJSON();
   }
 
   async delete(id: string): Promise<void> {
@@ -183,7 +215,15 @@ export class TicketsService {
   }
 
   async assignTicket(id: string, assignedToId: string, assignedToName: string, assignedBy: any): Promise<any> {
-    const ticket = await this.ticketModel
+    const ticket = await this.ticketModel.findById(id).exec();
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    // Validate assignment
+    await this.validateTicketAssignment(ticket.projectId.toString(), assignedToId);
+
+    const updatedTicket = await this.ticketModel
       .findByIdAndUpdate(
         id,
         { assignedToId, assignedToName, status: 'assigned' },
@@ -191,47 +231,14 @@ export class TicketsService {
       )
       .exec();
     
-    if (!ticket) {
+    if (!updatedTicket) {
       throw new NotFoundException('Ticket not found');
     }
 
-    const ticketJson = ticket.toJSON() as any;
-
-    // Log activity
-    await this.activitiesService.logTicketAssigned(
-      ticketJson.id,
-      ticketJson.title,
-      assignedBy.id,
-      assignedBy.name,
-      assignedToId,
-      assignedToName,
-    );
-
-    // Send real-time notification
-    await this.notificationsService.notifyTicketAssigned(
-      assignedToId,
-      ticketJson.id,
-      ticketJson.title,
-      assignedBy.name,
-    );
-
-    // Broadcast ticket update
-    await this.notificationsService.broadcastTicketUpdate(ticketJson.id, {
-      action: 'assigned',
-      ticket: ticketJson,
-    });
-
-    return ticketJson;
+    return updatedTicket.toJSON();
   }
 
   async updateStatus(id: string, status: string, user: any): Promise<any> {
-    const oldTicket = await this.ticketModel.findById(id).exec();
-    if (!oldTicket) {
-      throw new NotFoundException('Ticket not found');
-    }
-
-    const oldStatus = oldTicket.status;
-
     const ticket = await this.ticketModel
       .findByIdAndUpdate(id, { status }, { new: true })
       .exec();
@@ -240,44 +247,6 @@ export class TicketsService {
       throw new NotFoundException('Ticket not found');
     }
 
-    const ticketJson = ticket.toJSON() as any;
-
-    // Log activity
-    await this.activitiesService.logStatusChanged(
-      ticketJson.id,
-      ticketJson.title,
-      user.id,
-      user.name,
-      oldStatus,
-      status,
-    );
-
-    // Send notification if ticket is closed
-    if (status === 'closed') {
-      if (ticket.assignedToId) {
-        await this.notificationsService.notifyTicketClosed(
-          ticket.assignedToId.toString(),
-          ticketJson.id,
-          ticketJson.title,
-        );
-      }
-
-      // Log closed activity
-      await this.activitiesService.logTicketClosed(
-        ticketJson.id,
-        ticketJson.title,
-        user.id,
-        user.name,
-      );
-    }
-
-    // Broadcast ticket update
-    await this.notificationsService.broadcastTicketUpdate(ticketJson.id, {
-      action: 'status_changed',
-      status,
-      ticket: ticketJson,
-    });
-
-    return ticketJson;
+    return ticket.toJSON();
   }
 }
