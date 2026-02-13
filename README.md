@@ -1,3 +1,13 @@
+⚠️ Important Setup Notice
+
+This is the core NestJS API for the Ticket Management System and is required for the frontend to function.
+
+First-Time Setup Rules:
+- The very first registered user must be a SuperAdmin, you can create a superadmin by running the script in scripts directory.
+- Only SuperAdmins can create Organizations
+- Organizations can create Admins
+- Admins can create Members (QA/Dev) and Projects
+
 # TickFlo Backend
 
 NestJS backend API for ticket management system.
