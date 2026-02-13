@@ -113,6 +113,8 @@ Docs: `http://localhost:5050/api/docs`
 **QA** - Manage tickets in assigned projects  
 **Developer** - View and update assigned tickets
 
+P.S: In order to run this application, you first need to register as a SuperAdmin.
+
 ## Authentication
 
 Protected endpoints require JWT token:
@@ -121,4 +123,4 @@ Protected endpoints require JWT token:
 Authorization: Bearer <token>
 ```
 
-P.S: In order to run this application, you first need to register as a SuperAdmin.
+
