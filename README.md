@@ -121,6 +121,4 @@ Protected endpoints require JWT token:
 Authorization: Bearer <token>
 ```
 
-## License
-
-UNLICENSED
+P.S: In order to run this application, you first need to register as a SuperAdmin.
