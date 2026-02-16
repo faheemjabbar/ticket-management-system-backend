@@ -1,7 +1,10 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { Organization, OrganizationDocument } from '../organizations/schemas/organization.schema';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RegisterAdminDto } from './dto/register-admin.dto';
@@ -15,6 +18,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private mailService: MailService,
+    @InjectModel(Organization.name) private organizationModel: Model<OrganizationDocument>,
   ) {}
 
   async registerAdmin(registerAdminDto: RegisterAdminDto) {
@@ -68,15 +72,38 @@ export class AuthService {
       throw new UnauthorizedException('Account is inactive');
     }
 
+    // Check organization status for non-admin users
+    let organizationData: { id: string; name: string; isActive: boolean } | null = null;
+    if (user.organizationId && user.role !== 'admin') {
+      const organization = await this.organizationModel.findById(user.organizationId).exec();
+      
+      if (!organization) {
+        throw new UnauthorizedException('Organization not found');
+      }
+      
+      if (!organization.isActive) {
+        throw new ForbiddenException('Your organization has been deactivated. Please contact support.');
+      }
+      
+      organizationData = {
+        id: organization._id.toString(),
+        name: organization.name,
+        isActive: organization.isActive,
+      };
+    } else if (user.organizationId) {
+      // For admin users, still get organization data but don't check isActive
+      const organization = await this.organizationModel.findById(user.organizationId).exec();
+      if (organization) {
+        organizationData = {
+          id: organization._id.toString(),
+          name: organization.name,
+          isActive: organization.isActive,
+        };
+      }
+    }
+
     // Update last login
     await this.usersService.updateLastLogin(user.id);
-
-    // Get organization name if user has organizationId
-    let organizationName = null;
-    if (user.organizationId) {
-      const userWithOrg = await this.usersService.findById(user.id);
-      organizationName = userWithOrg.organization?.name || null;
-    }
 
     const payload = { 
       userId: user.id, 
@@ -93,10 +120,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
-        organization: user.organizationId ? {
-          id: user.organizationId,
-          name: organizationName,
-        } : null,
+        organization: organizationData,
         isActive: user.isActive,
       },
     };

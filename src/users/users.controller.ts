@@ -17,7 +17,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
-  @Roles('project-manager', 'qa')
+  @Roles('admin', 'project-manager', 'qa')
   @ApiOperation({ summary: 'Get all users' })
   async findAll(@Query() query: any, @CurrentUser() user: any) {
     return this.usersService.findAll(query, user);

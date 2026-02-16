@@ -73,28 +73,88 @@ export class OrganizationsService {
     }
   }
 
-  async findAll(): Promise<any> {
-    const organizations = await this.organizationModel.find().exec();
-    return organizations.map(org => org.toJSON());
+  async findAll(adminId?: string): Promise<any> {
+    const filter: any = {};
+    if (adminId) {
+      filter.createdBy = adminId;
+    }
+    
+    const organizations = await this.organizationModel.find(filter).exec();
+    
+    // Get project managers for each organization
+    const orgsWithPMs = await Promise.all(
+      organizations.map(async (org) => {
+        const projectManagers = await this.userModel
+          .find({ 
+            organizationId: org._id, 
+            role: 'project-manager' 
+          })
+          .select('name email isActive lastLogin')
+          .exec();
+        
+        return {
+          ...org.toJSON(),
+          projectManagers: projectManagers.map(pm => pm.toJSON()),
+        };
+      })
+    );
+    
+    return orgsWithPMs;
   }
 
-  async findById(id: string): Promise<any> {
-    const organization = await this.organizationModel.findById(id).exec();
+  async findById(id: string, adminId?: string): Promise<any> {
+    const filter: any = { _id: id };
+    if (adminId) {
+      filter.createdBy = adminId;
+    }
+    
+    const organization = await this.organizationModel.findOne(filter).exec();
     if (!organization) {
       throw new NotFoundException('Organization not found');
     }
-    return organization.toJSON();
+    
+    // Get project managers for this organization
+    const projectManagers = await this.userModel
+      .find({ 
+        organizationId: organization._id, 
+        role: 'project-manager' 
+      })
+      .select('name email isActive lastLogin')
+      .exec();
+    
+    return {
+      ...organization.toJSON(),
+      projectManagers: projectManagers.map(pm => pm.toJSON()),
+    };
   }
 
-  async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<any> {
+  async update(id: string, updateOrganizationDto: UpdateOrganizationDto, adminId?: string): Promise<any> {
+    const filter: any = { _id: id };
+    if (adminId) {
+      filter.createdBy = adminId;
+    }
+    
     const organization = await this.organizationModel
-      .findByIdAndUpdate(id, updateOrganizationDto, { new: true })
+      .findOneAndUpdate(filter, updateOrganizationDto, { new: true })
       .exec();
     
     if (!organization) {
-      throw new NotFoundException('Organization not found');
+      throw new NotFoundException('Organization not found or you do not have permission to update it');
     }
-    return organization.toJSON();
+    
+    // Get project managers for this organization
+    const projectManagers = await this.userModel
+      .find({ 
+        organizationId: organization._id, 
+        role: 'project-manager' 
+      })
+      .select('name email isActive lastLogin')
+      .exec();
+    
+    return {
+      ...organization.toJSON(),
+      projectManagers: projectManagers.map(pm => pm.toJSON()),
+    };
   }
 
   async delete(id: string): Promise<void> {

@@ -19,15 +19,15 @@ export class OrganizationsController {
   @Get()
   @Roles('admin')
   @ApiOperation({ summary: 'Get all organizations (Admin only)' })
-  async findAll() {
-    return this.organizationsService.findAll();
+  async findAll(@CurrentUser() user: any) {
+    return this.organizationsService.findAll(user.id);
   }
 
   @Get(':id')
   @Roles('admin')
   @ApiOperation({ summary: 'Get organization by ID' })
-  async findOne(@Param('id') id: string) {
-    return this.organizationsService.findById(id);
+  async findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.organizationsService.findById(id, user.id);
   }
 
   @Get(':id/stats')
@@ -57,8 +57,8 @@ export class OrganizationsController {
   @Put(':id')
   @Roles('admin')
   @ApiOperation({ summary: 'Update organization (Admin only)' })
-  async update(@Param('id') id: string, @Body() updateOrganizationDto: UpdateOrganizationDto) {
-    return this.organizationsService.update(id, updateOrganizationDto);
+  async update(@Param('id') id: string, @Body() updateOrganizationDto: UpdateOrganizationDto, @CurrentUser() user: any) {
+    return this.organizationsService.update(id, updateOrganizationDto, user.id);
   }
 
   @Delete(':id')

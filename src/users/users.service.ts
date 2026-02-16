@@ -51,7 +51,11 @@ export class UsersService {
     
     // Organization-based filtering
     if (user) {
-      if (user.role === 'project-manager') {
+      if (user.role === 'admin') {
+        // Admin sees only project managers they created
+        filter.role = 'project-manager';
+        filter.createdBy = user.id;
+      } else if (user.role === 'project-manager') {
         // Project Manager sees only users in their organization
         // Convert to ObjectId to match both string and ObjectId in database
         const orgId = user.organizationId;
@@ -71,7 +75,10 @@ export class UsersService {
       }
     }
     
-    if (role) filter.role = role;
+    // Apply additional filters only if not admin (admin filter is already set)
+    if (user?.role !== 'admin') {
+      if (role) filter.role = role;
+    }
     if (isActive !== undefined) filter.isActive = isActive === 'true';
     if (search) {
       const searchFilter = {

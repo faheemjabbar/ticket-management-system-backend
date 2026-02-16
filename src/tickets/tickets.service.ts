@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Ticket, TicketDocument } from './schemas/ticket.schema';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -95,20 +95,22 @@ export class TicketsService {
     
     const filter: any = {};
     
-    // Role-based filtering: Project Managers only see tickets from their assigned projects
-    if (user && user.role === 'project-manager') {
-      // Get all project IDs where project manager is involved
-      const pmProjects = await this.projectModel.find({
+    // Organization-based filtering for all non-admin users
+    if (user && user.role !== 'admin') {
+      // Get all projects in user's organization
+      const userOrgId = user.organizationId;
+      const orgProjects = await this.projectModel.find({
         $or: [
-          { createdBy: user.id },
-          { 'teamMembers.userId': user.id }
+          { organizationId: userOrgId },
+          { organizationId: userOrgId.toString() },
+          { organizationId: new Types.ObjectId(userOrgId.toString()) }
         ]
       }).select('_id').exec();
       
-      const projectIds = pmProjects.map(p => p._id.toString());
+      const projectIds = orgProjects.map(p => p._id.toString());
       
       if (projectIds.length === 0) {
-        // Project Manager has no projects, return empty
+        // User's organization has no projects, return empty
         return {
           tickets: [],
           total: 0,
@@ -120,18 +122,17 @@ export class TicketsService {
       
       filter.projectId = { $in: projectIds };
     }
-    // Admin, QA, Developer see all tickets (or implement their own logic)
     
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (projectId) {
-      // If specific projectId is requested, use it (but still respect admin filter)
+      // If specific projectId is requested, use it (but still respect organization filter)
       if (filter.projectId) {
-        // Check if requested projectId is in project manager's allowed projects
+        // Check if requested projectId is in user's allowed projects
         if (filter.projectId.$in.includes(projectId)) {
           filter.projectId = projectId;
         } else {
-          // Project Manager trying to access project they're not part of
+          // User trying to access project they don't have access to
           return {
             tickets: [],
             total: 0,
@@ -166,19 +167,19 @@ export class TicketsService {
       throw new NotFoundException('Ticket not found');
     }
     
-    // Check if project manager has access to this ticket's project
-    if (user && user.role === 'project-manager') {
+    // Check if user has access to this ticket's project (organization-based)
+    if (user && user.role !== 'admin') {
       const project = await this.projectModel.findById(ticket.projectId).exec();
-      if (project) {
-        const hasAccess = 
-          project.createdBy.toString() === user.id ||
-          project.teamMembers.some(member => member.userId.toString() === user.id);
-        
-        if (!hasAccess) {
-          throw new NotFoundException('Ticket not found');
-        }
-      } else {
+      if (!project) {
         throw new NotFoundException('Ticket not found');
+      }
+      
+      // Check if project belongs to user's organization
+      const projectOrgId = project.organizationId?.toString();
+      const userOrgId = user.organizationId?.toString();
+      
+      if (projectOrgId !== userOrgId) {
+        throw new ForbiddenException('Access denied: Ticket belongs to a different organization');
       }
     }
     

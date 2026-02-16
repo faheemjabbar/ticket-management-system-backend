@@ -20,7 +20,9 @@ export class CommentsController {
 
   @Get()
   @ApiOperation({ summary: 'Get comments for ticket' })
-  async findByTicket(@Param('ticketId', ParseObjectIdPipe) ticketId: string) {
+  async findByTicket(@Param('ticketId', ParseObjectIdPipe) ticketId: string, @CurrentUser() user: any) {
+    // Validate user has access to this ticket (organization check)
+    await this.ticketsService.findById(ticketId, user);
     return this.commentsService.findByTicketId(ticketId);
   }
 
@@ -31,7 +33,7 @@ export class CommentsController {
     @Body() createCommentDto: CreateCommentDto,
     @CurrentUser() user: any,
   ) {
-    const ticket = await this.ticketsService.findById(ticketId);
+    const ticket = await this.ticketsService.findById(ticketId, user);
     return this.commentsService.create(ticketId, createCommentDto, user, ticket.title);
   }
 }
