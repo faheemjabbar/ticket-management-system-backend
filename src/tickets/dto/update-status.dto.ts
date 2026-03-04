@@ -1,13 +1,14 @@
 import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { TicketStatus } from '../enums/ticket-status.enum';
 
 export class UpdateStatusDto {
   @ApiProperty({
-    enum: ['pending', 'assigned', 'awaiting', 'closed'],
+    enum: Object.values(TicketStatus),
     description: 'New status for the ticket',
   })
-  @IsEnum(['pending', 'assigned', 'awaiting', 'closed'], {
-    message: 'Status must be one of: pending, assigned, awaiting, closed',
+  @IsEnum(Object.values(TicketStatus), {
+    message: `Status must be one of: ${Object.values(TicketStatus).join(', ')}`,
   })
   status: string;
 }

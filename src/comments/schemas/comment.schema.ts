@@ -36,6 +36,25 @@ export class Comment {
 
   @Prop({ type: [Attachment], default: [] })
   attachments: Attachment[];
+
+  // Enhanced Features
+  @Prop({ enum: ['comment', 'internal_note', 'system'], default: 'comment' })
+  type: string;
+
+  @Prop({ default: false })
+  isInternal: boolean;
+
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  mentions: Types.ObjectId[];
+
+  @Prop({ type: Types.ObjectId, ref: 'Comment', default: null })
+  parentCommentId: Types.ObjectId;
+
+  @Prop({ default: false })
+  isEdited: boolean;
+
+  @Prop({ type: Date, default: null })
+  editedAt: Date;
 }
 
 export const CommentSchema = SchemaFactory.createForClass(Comment);

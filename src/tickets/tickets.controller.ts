@@ -6,6 +6,8 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { LinkTicketDto } from './dto/link-ticket.dto';
+import { AddWatcherDto, RemoveWatcherDto } from './dto/manage-watchers.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { ParseObjectIdPipe } from '../common/pipes/parse-objectid.pipe';
@@ -78,5 +80,69 @@ export class TicketsController {
     @CurrentUser() user: any,
   ) {
     return this.ticketsService.updateStatus(id, updateStatusDto.status, user);
+  }
+
+  @Post(':id/link')
+  @ApiOperation({ summary: 'Link ticket to another ticket' })
+  async linkTickets(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() linkTicketDto: LinkTicketDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketsService.linkTickets(
+      id,
+      linkTicketDto.targetTicketId,
+      linkTicketDto.relationType,
+      user,
+    );
+  }
+
+  @Delete(':id/link/:targetId/:relationType')
+  @ApiOperation({ summary: 'Unlink ticket from another ticket' })
+  async unlinkTickets(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('targetId', ParseObjectIdPipe) targetId: string,
+    @Param('relationType') relationType: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketsService.unlinkTickets(id, targetId, relationType, user);
+  }
+
+  @Get(':id/related')
+  @ApiOperation({ summary: 'Get related tickets' })
+  async getRelatedTickets(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketsService.getRelatedTickets(id, user);
+  }
+
+  @Post(':id/watchers')
+  @ApiOperation({ summary: 'Add watcher to ticket' })
+  async addWatcher(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Body() addWatcherDto: AddWatcherDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketsService.addWatcher(id, addWatcherDto.userId, user);
+  }
+
+  @Delete(':id/watchers/:userId')
+  @ApiOperation({ summary: 'Remove watcher from ticket' })
+  async removeWatcher(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @Param('userId', ParseObjectIdPipe) userId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketsService.removeWatcher(id, userId, user);
+  }
+
+  @Get(':id/watchers')
+  @ApiOperation({ summary: 'Get ticket watchers' })
+  async getWatchers(
+    @Param('id', ParseObjectIdPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.ticketsService.getWatchers(id, user);
   }
 }

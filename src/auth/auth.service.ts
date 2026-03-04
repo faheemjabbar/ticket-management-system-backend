@@ -22,13 +22,9 @@ export class AuthService {
   ) {}
 
   async registerAdmin(registerAdminDto: RegisterAdminDto) {
-    // Check if any admin already exists
-    const existingAdmins = await this.usersService.findAll({ role: 'admin' }, null);
+    // Allow multiple admins - removed single admin restriction
+    // This allows for proper admin hierarchy and redundancy
     
-    if (existingAdmins.total > 0) {
-      throw new BadRequestException('Admin user already exists. Only one admin is allowed.');
-    }
-
     // Create admin user (password will be hashed by pre-save hook)
     const admin = await this.usersService.create({
       ...registerAdminDto,

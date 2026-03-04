@@ -6,6 +6,7 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { Project, ProjectDocument } from '../projects/schemas/project.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { TicketStatus, isValidStatusTransition } from './enums/ticket-status.enum';
 
 @Injectable()
 export class TicketsService {
@@ -18,9 +19,10 @@ export class TicketsService {
   /**
    * Validates that a user can be assigned to a ticket in a project
    * Rules:
-   * 1. User must be a member of the project team
-   * 2. User must be in the same organization as the project
-   * 3. User must have developer or qa role (not admin)
+   * 1. User must be in the same organization as the project (REQUIRED)
+   * 2. User must be active (REQUIRED)
+   * 3. Team membership is recommended but not enforced (WARNING only)
+   * 4. All roles can be assigned (including project-manager)
    */
   private async validateTicketAssignment(projectId: string, assignedToId: string): Promise<void> {
     // Get the project
@@ -35,7 +37,7 @@ export class TicketsService {
       throw new NotFoundException('User not found');
     }
 
-    // Check if user is in the same organization as the project
+    // Check if user is in the same organization as the project (REQUIRED)
     const userOrgId = user.organizationId?.toString();
     const projectOrgId = project.organizationId?.toString();
     
@@ -43,23 +45,33 @@ export class TicketsService {
       throw new BadRequestException('Cannot assign ticket: User is not in the same organization as the project');
     }
 
-    // Check if user has appropriate role (not project-manager)
-    if (user.role === 'project-manager') {
-      throw new BadRequestException('Cannot assign ticket: Project Manager users cannot be assigned to tickets');
+    // Check if user is active (REQUIRED)
+    if (!user.isActive) {
+      throw new BadRequestException('Cannot assign ticket: User account is inactive');
     }
 
-    // Check if user is a member of the project team
+    // Check if user is a member of the project team (WARNING only - not enforced)
     const isTeamMember = project.teamMembers.some(
       member => member.userId.toString() === assignedToId
     );
 
     if (!isTeamMember) {
-      throw new BadRequestException('Cannot assign ticket: User is not a member of this project team');
+      console.warn(`Warning: User ${user.name} (${assignedToId}) is not a team member of project ${project.name} but assignment is allowed`);
+    }
+  }
+
+  /**
+   * Validates status transition
+   */
+  private validateStatusTransition(currentStatus: string, newStatus: string): void {
+    if (currentStatus === newStatus) {
+      return; // No change
     }
 
-    // Check if user is active
-    if (!user.isActive) {
-      throw new BadRequestException('Cannot assign ticket: User account is inactive');
+    if (!isValidStatusTransition(currentStatus, newStatus)) {
+      throw new BadRequestException(
+        `Invalid status transition from '${currentStatus}' to '${newStatus}'`
+      );
     }
   }
 
@@ -76,13 +88,17 @@ export class TicketsService {
       }
     }
 
+    // Status and assignment are independent
+    // Default status is 'backlog' if not provided
     const ticket = new this.ticketModel({
       ...createTicketDto,
       assignedToName,
       authorId: user.id,
       authorName: user.name,
       projectName,
-      status: createTicketDto.assignedToId ? 'assigned' : 'pending',
+      status: createTicketDto.status || TicketStatus.BACKLOG,
+      type: createTicketDto.type || 'task',
+      priorityScore: createTicketDto.priorityScore || 1000,
     });
     const savedTicket = await ticket.save();
     const ticketJson = savedTicket.toJSON() as any;
@@ -224,10 +240,12 @@ export class TicketsService {
     // Validate assignment
     await this.validateTicketAssignment(ticket.projectId.toString(), assignedToId);
 
+    // Assignment does NOT automatically change status
+    // Status and assignment are independent
     const updatedTicket = await this.ticketModel
       .findByIdAndUpdate(
         id,
-        { assignedToId, assignedToName, status: 'assigned' },
+        { assignedToId, assignedToName },
         { new: true }
       )
       .exec();
@@ -240,14 +258,233 @@ export class TicketsService {
   }
 
   async updateStatus(id: string, status: string, user: any): Promise<any> {
-    const ticket = await this.ticketModel
-      .findByIdAndUpdate(id, { status }, { new: true })
-      .exec();
+    const ticket = await this.ticketModel.findById(id).exec();
     
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
 
-    return ticket.toJSON();
+    // Validate status transition
+    this.validateStatusTransition(ticket.status, status);
+
+    // Check if ticket is blocked by other tickets
+    if (status === 'done' || status === 'closed') {
+      const blockingTickets = await this.ticketModel.find({
+        'relatedTickets.ticketId': id,
+        'relatedTickets.relationType': 'blocks',
+        status: { $nin: ['done', 'closed', 'rejected'] }
+      }).exec();
+
+      if (blockingTickets.length > 0) {
+        const blockingTitles = blockingTickets.map(t => t.title).join(', ');
+        throw new BadRequestException(
+          `Cannot close ticket: Blocked by ${blockingTickets.length} ticket(s): ${blockingTitles}`
+        );
+      }
+    }
+
+    const updatedTicket = await this.ticketModel
+      .findByIdAndUpdate(id, { status }, { new: true })
+      .exec();
+    
+    if (!updatedTicket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    return updatedTicket.toJSON();
+  }
+
+  async linkTickets(ticketId: string, targetTicketId: string, relationType: string, user: any): Promise<any> {
+    // Validate both tickets exist
+    const [ticket, targetTicket] = await Promise.all([
+      this.ticketModel.findById(ticketId).exec(),
+      this.ticketModel.findById(targetTicketId).exec(),
+    ]);
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+    if (!targetTicket) {
+      throw new NotFoundException('Target ticket not found');
+    }
+
+    // Check if link already exists
+    const existingLink = ticket.relatedTickets?.find(
+      (rel: any) => rel.ticketId.toString() === targetTicketId && rel.relationType === relationType
+    );
+
+    if (existingLink) {
+      throw new BadRequestException('Tickets are already linked with this relationship');
+    }
+
+    // Add relationship
+    const updatedTicket = await this.ticketModel.findByIdAndUpdate(
+      ticketId,
+      {
+        $push: {
+          relatedTickets: {
+            ticketId: targetTicketId,
+            relationType,
+          },
+        },
+      },
+      { new: true }
+    ).exec();
+
+    // Add reciprocal relationship for certain types
+    const reciprocalTypes: Record<string, string> = {
+      'blocks': 'blocked_by',
+      'blocked_by': 'blocks',
+      'duplicates': 'duplicate_of',
+      'duplicate_of': 'duplicates',
+    };
+
+    if (reciprocalTypes[relationType]) {
+      await this.ticketModel.findByIdAndUpdate(
+        targetTicketId,
+        {
+          $push: {
+            relatedTickets: {
+              ticketId: ticketId,
+              relationType: reciprocalTypes[relationType],
+            },
+          },
+        }
+      ).exec();
+    }
+
+    return updatedTicket?.toJSON();
+  }
+
+  async unlinkTickets(ticketId: string, targetTicketId: string, relationType: string, user: any): Promise<any> {
+    const ticket = await this.ticketModel.findById(ticketId).exec();
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    // Remove relationship
+    const updatedTicket = await this.ticketModel.findByIdAndUpdate(
+      ticketId,
+      {
+        $pull: {
+          relatedTickets: {
+            ticketId: targetTicketId,
+            relationType,
+          },
+        },
+      },
+      { new: true }
+    ).exec();
+
+    // Remove reciprocal relationship
+    const reciprocalTypes: Record<string, string> = {
+      'blocks': 'blocked_by',
+      'blocked_by': 'blocks',
+      'duplicates': 'duplicate_of',
+      'duplicate_of': 'duplicates',
+    };
+
+    if (reciprocalTypes[relationType]) {
+      await this.ticketModel.findByIdAndUpdate(
+        targetTicketId,
+        {
+          $pull: {
+            relatedTickets: {
+              ticketId: ticketId,
+              relationType: reciprocalTypes[relationType],
+            },
+          },
+        }
+      ).exec();
+    }
+
+    return updatedTicket?.toJSON();
+  }
+
+  async getRelatedTickets(ticketId: string, user: any): Promise<any> {
+    const ticket = await this.ticketModel
+      .findById(ticketId)
+      .populate('relatedTickets.ticketId', 'title status type priority')
+      .exec();
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    // Get child tickets (where this ticket is parent)
+    const children = await this.ticketModel
+      .find({ parentId: ticketId })
+      .select('id title status type priority')
+      .exec();
+
+    return {
+      related: ticket.relatedTickets || [],
+      children: children.map(c => c.toJSON()),
+      parent: ticket.parentId ? await this.ticketModel.findById(ticket.parentId).select('id title status type priority').exec() : null,
+    };
+  }
+
+  async addWatcher(ticketId: string, userId: string, user: any): Promise<any> {
+    const ticket = await this.ticketModel.findById(ticketId).exec();
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    // Verify user exists
+    const watcherUser = await this.userModel.findById(userId).exec();
+    if (!watcherUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if already watching
+    const isWatching = ticket.watchers?.some((w: any) => w.toString() === userId);
+    if (isWatching) {
+      throw new BadRequestException('User is already watching this ticket');
+    }
+
+    const updatedTicket = await this.ticketModel
+      .findByIdAndUpdate(
+        ticketId,
+        { $addToSet: { watchers: userId } },
+        { new: true }
+      )
+      .populate('watchers', 'name email')
+      .exec();
+
+    return updatedTicket?.toJSON();
+  }
+
+  async removeWatcher(ticketId: string, userId: string, user: any): Promise<any> {
+    const ticket = await this.ticketModel.findById(ticketId).exec();
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    const updatedTicket = await this.ticketModel
+      .findByIdAndUpdate(
+        ticketId,
+        { $pull: { watchers: userId } },
+        { new: true }
+      )
+      .populate('watchers', 'name email')
+      .exec();
+
+    return updatedTicket?.toJSON();
+  }
+
+  async getWatchers(ticketId: string, user: any): Promise<any> {
+    const ticket = await this.ticketModel
+      .findById(ticketId)
+      .populate('watchers', 'name email avatar')
+      .exec();
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    return {
+      watchers: ticket.watchers || [],
+      count: ticket.watchers?.length || 0,
+    };
   }
 }

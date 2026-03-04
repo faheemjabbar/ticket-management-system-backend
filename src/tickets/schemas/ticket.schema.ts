@@ -1,5 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { TicketStatus } from '../enums/ticket-status.enum';
+import { TicketType } from '../enums/ticket-type.enum';
 
 export type TicketDocument = Ticket & Document;
 
@@ -11,17 +13,34 @@ export class Ticket {
   @Prop({ required: true })
   description: string;
 
-  @Prop({ required: true, enum: ['pending', 'assigned', 'awaiting', 'closed'], default: 'pending' })
+  @Prop({ 
+    required: true, 
+    enum: Object.values(TicketStatus), 
+    default: TicketStatus.BACKLOG 
+  })
   status: string;
+
+  @Prop({ 
+    required: true, 
+    enum: Object.values(TicketType), 
+    default: TicketType.TASK 
+  })
+  type: string;
 
   @Prop({ required: true, enum: ['low', 'medium', 'high', 'critical'], default: 'medium' })
   priority: string;
+
+  @Prop({ min: 0, max: 10000, default: 1000 })
+  priorityScore: number;
 
   @Prop({ type: Types.ObjectId, ref: 'Project', required: true })
   projectId: Types.ObjectId;
 
   @Prop({ required: true })
   projectName: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'Sprint', default: null })
+  sprintId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   authorId: Types.ObjectId;
@@ -35,11 +54,39 @@ export class Ticket {
   @Prop({ default: null })
   assignedToName: string;
 
-  @Prop({ type: [String], default: [] })
-  labels: string[];
+  @Prop({ type: [Types.ObjectId], ref: 'Label', default: [] })
+  labels: Types.ObjectId[];
 
   @Prop({ type: Date, default: null })
   deadline: Date;
+
+  // Estimation & Time Tracking
+  @Prop({ min: 0 })
+  storyPoints?: number;
+
+  @Prop({ min: 0 })
+  estimatedHours?: number;
+
+  // Acceptance Criteria
+  @Prop({ type: [String], default: [] })
+  acceptanceCriteria: string[];
+
+  // Watchers (users following this ticket)
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  watchers: Types.ObjectId[];
+
+  // Ticket Relationships
+  @Prop({ type: Types.ObjectId, ref: 'Ticket', default: null })
+  parentId: Types.ObjectId;
+
+  @Prop({ type: [{
+    ticketId: { type: Types.ObjectId, ref: 'Ticket' },
+    relationType: { type: String, enum: ['blocks', 'blocked_by', 'relates_to', 'duplicates', 'duplicate_of'] }
+  }], default: [] })
+  relatedTickets: Array<{
+    ticketId: Types.ObjectId;
+    relationType: string;
+  }>;
 }
 
 export const TicketSchema = SchemaFactory.createForClass(Ticket);
