@@ -51,6 +51,14 @@ export class AuthService {
     };
   }
 
+  async checkAdminExists() {
+    const admins = await this.usersService.findAll({ role: 'admin' }, null);
+    return {
+      exists: admins.total > 0,
+      count: admins.total,
+    };
+  }
+
   async login(loginDto: LoginDto) {
     const user = await this.usersService.findByEmail(loginDto.email);
     

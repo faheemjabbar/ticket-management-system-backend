@@ -19,6 +19,12 @@ export class AuthController {
     return this.authService.registerAdmin(registerAdminDto);
   }
 
+  @Get('admin-exist')
+  @ApiOperation({ summary: 'Check if admin exists (public endpoint)' })
+  async checkAdminExists() {
+    return this.authService.checkAdminExists();
+  }
+
   @Post('login')
   @ApiOperation({ summary: 'Login user' })
   async login(@Body() loginDto: LoginDto) {
